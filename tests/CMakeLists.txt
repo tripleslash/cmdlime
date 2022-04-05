@@ -15,7 +15,9 @@ set(SRC
     test_gnu_format.cpp 
     test_posix_format.cpp
     test_x11_format.cpp
-    test_nameutils.cpp 
+    test_validator.cpp
+    test_nameutils.cpp
+
 )
 
 add_executable(test_cmdlime ${SRC})
@@ -23,5 +25,4 @@ target_compile_features(test_cmdlime PUBLIC cxx_std_17)
 set_target_properties(test_cmdlime PROPERTIES CXX_EXTENSIONS OFF POSITION_INDEPENDENT_CODE OFF)
 
 add_test(NAME test_cmdlime COMMAND test_cmdlime)
-target_include_directories(test_cmdlime PRIVATE ../include)
-target_link_libraries(test_cmdlime PRIVATE ${GTEST_BOTH_LIBRARIES} Threads::Threads GSL sfun)
+target_link_libraries(test_cmdlime PRIVATE cmdlime::cmdlime ${GTEST_BOTH_LIBRARIES} Threads::Threads)

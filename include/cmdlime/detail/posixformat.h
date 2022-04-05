@@ -1,21 +1,19 @@
 #pragma once
 #include "parser.h"
-#include "format.h"
 #include "nameutils.h"
 #include "utils.h"
-#include <sfun/string_utils.h>
+#include "formatcfg.h"
+#include "string_utils.h"
 #include <cmdlime/errors.h>
-#include <gsl/gsl>
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
 #include <functional>
-#include <cassert>
 
 namespace cmdlime::detail{
-namespace str = sfun::string_utils;
+namespace str = string_utils;
 
-template <FormatType formatType>
+template <Format formatType>
 class PosixParser : public Parser<formatType>
 {
     using Parser<formatType>::Parser;
@@ -49,13 +47,13 @@ class PosixParser : public Parser<formatType>
     }
 
     void process(const std::string& token) override
-    {       
-        if (str::startsWith(token, "-") && token.size() > 1)
-           processCommand(token);
-        else if (!foundParam_.empty()){
+    {
+        if (!foundParam_.empty()){
             this->readParam(foundParam_, token);
             foundParam_.clear();
         }
+        else if (str::startsWith(token, "-") && token.size() > 1)
+           processCommand(token);
         else{
             this->readArg(token);
             argumentEncountered_ = true;
@@ -252,9 +250,9 @@ public:
 };
 
 template<>
-struct Format<FormatType::POSIX>
+struct FormatCfg<Format::POSIX>
 {
-    using parser = PosixParser<FormatType::POSIX>;
+    using parser = PosixParser<Format::POSIX>;
     using nameProvider = PosixNameProvider;
     using outputFormatter = PosixOutputFormatter;
     static constexpr bool shortNamesEnabled = false;

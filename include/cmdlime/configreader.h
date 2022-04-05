@@ -1,16 +1,16 @@
 #pragma once
 #include "errors.h"
 #include "usageinfoformat.h"
-#include "detail/config.h"
+#include "baseconfig.h"
 #include "detail/configmacro.h"
-#include "detail/configaccess.h"
 #include "detail/flag.h"
-#include <gsl/gsl>
 #include <iostream>
 #include <ostream>
 #include <optional>
 #include <map>
 #include <utility>
+#include <functional>
+
 
 namespace cmdlime{
 
@@ -28,14 +28,15 @@ class ConfigReader{
 
 public:
     ConfigReader(TConfig& cfg,
-                 std::string programName,
+                 const std::string& programName,
                  const UsageInfoFormat& usageInfoFormat = {},
                  ErrorOutputMode errorOutputMode = ErrorOutputMode::STDERR)
         : cfg_(cfg)
-        , programName_(std::move(programName))
-        , usageInfoFormat_(usageInfoFormat)
         , errorOutput_(errorOutputMode == ErrorOutputMode::STDERR ? std::cerr : std::cout)
-    {}
+    {
+        cfg_.setCommandName(programName);
+        cfg_.setUsageInfoFormat(usageInfoFormat);
+    }
 
     int exitCode() const
     {
@@ -60,42 +61,54 @@ public:
         return read(cmdLine);
     }
 
+    void setOutputStream(std::ostream& outStream)
+    {
+        output_ = outStream;
+    }
+
+    void setErrorOutputStream(std::ostream& outStream)
+    {
+        errorOutput_ = outStream;
+    }
+
 private:
     void addExitFlags()
     {
-        using NameProvider = typename detail::Format<detail::ConfigAccess<TConfig>::format()>::nameProvider;
+        using NameProvider = typename detail::FormatCfg<TConfig::format()>::nameProvider;
         auto helpFlag = std::make_unique<detail::Flag>(NameProvider::name("help"),
                                                        std::string{},
-                                                       [this]()->bool&{return help_;},
+                                                       help_,
                                                        detail::Flag::Type::Exit);
         helpFlag->info().addDescription("show usage info and exit");
-        detail::ConfigAccess<TConfig>{cfg_}.addFlag(std::move(helpFlag));
+        cfg_.addFlag(std::move(helpFlag));
 
         if (!cfg_.versionInfo().empty()){
             auto versionFlag = std::make_unique<detail::Flag>(NameProvider::name("version"),
                                                            std::string{},
-                                                           [this]()->bool&{return version_;},
+                                                           version_,
                                                            detail::Flag::Type::Exit);
             versionFlag->info().addDescription("show version info and exit");
-            detail::ConfigAccess<TConfig>{cfg_}.addFlag(std::move(versionFlag));
+            cfg_.addFlag(std::move(versionFlag));
         }
 
-        detail::ConfigAccess<TConfig>(cfg_).addHelpFlagToCommands(programName_);
+        for (auto& command : cfg_.options().commands())
+            command->enableHelpFlag();
     }
 
     bool processCommandLine(const std::vector<std::string>& cmdLine)
     {
         try{
             cfg_.read(cmdLine);
+            cfg_.validate({});
         }
         catch(const CommandError& e){
-            errorOutput_ << "Command '" + e.commandName() + "' error: " << e.what() << "\n";
-            std::cout << e.commandUsageInfo() << std::endl;
+            errorOutput_.get() << "Command '" + e.commandName() + "' error: " << e.what() << "\n";
+            output_.get() << e.commandUsageInfo() << std::endl;
             return false;
         }
         catch(const Error& e){
-            errorOutput_ << e.what() << "\n";
-            std::cout << cfg_.usageInfo(programName_) << std::endl;
+            errorOutput_.get() << e.what() << "\n";
+            output_.get() << cfg_.usageInfo() << std::endl;
             return false;
         }
         return true;
@@ -104,31 +117,32 @@ private:
     bool processFlagsAndExit()
     {
         if (help_){
-            std::cout << cfg_.usageInfoDetailed(programName_, usageInfoFormat_) << std::endl;
+            output_.get() << cfg_.usageInfoDetailed() << std::endl;
             return true;
         }
         if (version_){
-            std::cout << cfg_.versionInfo() << std::endl;
+            output_.get() << cfg_.versionInfo() << std::endl;
             return true;
         }
 
-        for (auto command :  detail::ConfigAccess<TConfig>{cfg_}.commandList())
-            if (checkCommandHelpFlag(command))
+        for (auto& command : cfg_.options().commands())
+            if (checkCommandHelpFlag(*command))
                 return true;
 
         return false;
     }
 
-    bool checkCommandHelpFlag(gsl::not_null<detail::ICommand*> command)
+    bool checkCommandHelpFlag(detail::ICommand& command)
     {
-        if (command->isHelpFlagSet()){
-            std::cout << command->usageInfoDetailed() << std::endl;
+        if (command.isHelpFlagSet()){
+            output_.get() << command.usageInfoDetailed() << std::endl;
             return true;
         }
 
-        for (auto childCommand : command->commandList())
-            if (checkCommandHelpFlag(childCommand))
-                return true;
+        if (command.config())
+            for (auto& childCommand : command.config()->options().commands())
+                if (checkCommandHelpFlag(*childCommand))
+                    return true;
 
         return false;
     }
@@ -152,11 +166,9 @@ private:
     }
 
 private:
-    TConfig& cfg_;
-    std::string programName_;
-    UsageInfoFormat usageInfoFormat_;
-    std::map<int, CommandHelpFlag> commandHelpFlags_;
-    std::ostream& errorOutput_;
+    detail::IConfig& cfg_;
+    std::reference_wrapper<std::ostream> errorOutput_;
+    std::reference_wrapper<std::ostream> output_ = std::cout;
     int exitCode_ = 0;
     bool help_ = false;
     bool version_ = false;

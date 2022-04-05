@@ -1,11 +1,10 @@
 #pragma once
 #include "parser.h"
-#include "format.h"
 #include "nameutils.h"
 #include "utils.h"
-#include <sfun/string_utils.h>
+#include "formatcfg.h"
+#include "string_utils.h"
 #include <cmdlime/errors.h>
-#include <gsl/gsl>
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
@@ -13,9 +12,9 @@
 #include <optional>
 
 namespace cmdlime::detail{
-namespace str = sfun::string_utils;
+namespace str = string_utils;
 
-template <FormatType formatType>
+template <Format formatType>
 class GNUParser : public Parser<formatType>
 {
     using Parser<formatType>::Parser;
@@ -29,15 +28,15 @@ class GNUParser : public Parser<formatType>
     }
 
     void process(const std::string& token) override
-    {        
-        if (str::startsWith(token, "--") && token.size() > 2)
-            processCommand(token);
-        else if (str::startsWith(token, "-") && token.size() > 1)
-            processShortCommand(token);
-        else if (!foundParam_.empty()){
+    {
+        if (!foundParam_.empty()){
             this->readParam(foundParam_, token);
             foundParam_.clear();
         }
+        else if (str::startsWith(token, "--") && token.size() > 2)
+            processCommand(token);
+        else if (str::startsWith(token, "-") && token.size() > 1)
+            processShortCommand(token);
         else
             this->readArg(token);
     }
@@ -331,9 +330,9 @@ public:
 };
 
 template<>
-struct Format<FormatType::GNU>
+struct FormatCfg<Format::GNU>
 {
-    using parser = GNUParser<FormatType::GNU>;
+    using parser = GNUParser<Format::GNU>;
     using nameProvider = GNUNameProvider;
     using outputFormatter = GNUOutputFormatter;
     static constexpr bool shortNamesEnabled = true;

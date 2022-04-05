@@ -1,9 +1,9 @@
 #pragma once
 #include "parser.h"
-#include "format.h"
 #include "nameutils.h"
 #include "utils.h"
-#include <sfun/string_utils.h>
+#include "formatcfg.h"
+#include "string_utils.h"
 #include <cmdlime/errors.h>
 #include <algorithm>
 #include <sstream>
@@ -12,9 +12,9 @@
 #include <cassert>
 
 namespace cmdlime::detail{
-namespace str = sfun::string_utils;
+namespace str = string_utils;
 
-template <FormatType formatType>
+template <Format formatType>
 class X11Parser : public Parser<formatType>
 {
     using Parser<formatType>::Parser;
@@ -26,8 +26,12 @@ class X11Parser : public Parser<formatType>
     }
 
     void process(const std::string& token) override
-    {        
-        if (str::startsWith(token, "-") && token.size() > 1){
+    {
+        if (!foundParam_.empty()){
+            this->readParam(foundParam_, token);
+            foundParam_.clear();
+        }
+        else if (str::startsWith(token, "-") && token.size() > 1){
             auto command = str::after(token, "-");
             if (isParamOrFlag(command) && !foundParam_.empty())
                 throw ParsingError{"Parameter '-" + foundParam_ + "' value can't be empty"};
@@ -42,10 +46,6 @@ class X11Parser : public Parser<formatType>
                 this->readArg(token);
             else
                 throw ParsingError{"Encountered unknown parameter or flag '" + token + "'"};
-        }
-        else if (!foundParam_.empty()){
-            this->readParam(foundParam_, token);
-            foundParam_.clear();
         }
         else
             this->readArg(token);
@@ -220,9 +220,9 @@ public:
 };
 
 template<>
-struct Format<FormatType::X11>
+struct FormatCfg<Format::X11>
 {
-    using parser = X11Parser<FormatType::X11>;
+    using parser = X11Parser<Format::X11>;
     using nameProvider = X11NameProvider;
     using outputFormatter = X11OutputFormatter;
     static constexpr bool shortNamesEnabled = true;
